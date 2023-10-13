@@ -1,17 +1,27 @@
 // SPDX-License-Identifier: GPL-3.0
 
 pragma solidity >=0.8.2 <0.9.0;
-
 // pragma solidity 0.8.19;
 
 import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/master/contracts/access/Ownable.sol";
 
 contract Voting is Ownable {
-    // Proposal structure
+
+    uint proposalId;
+    uint winningProposalId;
+    bool registerSessionStarted;
+    bool votingSessionStarted;
+   
+    Proposal[] proposals;
+
+    mapping(address => bool) whiteList;
+    mapping (address => Voter) voters;
+
+
     struct Proposal {
         address proposer;
         string description;
-        uint voteCount; // A voir comment incorporer
+        uint voteCount;
     }
 
     struct Voter {
@@ -20,65 +30,6 @@ contract Voting is Ownable {
         uint votedProposalId;
     }
 
-    struct Vote {
-        address voter;
-        uint proposalIndex;
-    }
-
-    // Winning proposal ID
-    uint winningProposalId;
-
-    // For the registration session of proposals to vote
-    bool public registrationStatut;
-
-    // Voting session statut
-    bool public votingSessionStatut;
-
-    // Registered proposals
-    Proposal[] public proposals;
-
-    // Acces restriction to certain functions
-    modifier onlyOwnerOrAdmin() {
-        require(
-            msg.sender == owner() || msg.sender == adminAddress,
-            "Permission denied"
-        );
-        _;
-    }
-
-    // Admin Address
-    address public adminAddress;
-
-    constructor() Ownable(msg.sender) {
-        adminAddress = msg.sender;
-        registrationStatut = false;
-        votingSessionStatut = false;
-    }
-
-    Vote[] public votes;
-
-    // Electors' adress stocked by the owner
-    mapping(address => bool) public _whitelist;
-
-    // when a new voter address added
-    event voterAdded(address _voterAddr);
-
-    // when a new voter address removed
-    event voterRemoved(address _voterAddr);
-
-    // when registration is activated
-    event registerAvtivated(bool);
-
-    // when a proposal registered
-    event proposalRegistered(address indexed proposer, string descrption);
-
-    // when voting session activated
-    event votingSessionActivated(bool);
-
-    // When a vote registered
-    event voteRegistered(address indexed voter, uint proposalIndex);
-
-    // Votre smart contract doit définir les événements suivants :
     event VoterRegistered(address voterAddress);
     event WorkflowStatusChange(
         WorkflowStatus previousStatus,
@@ -87,7 +38,14 @@ contract Voting is Ownable {
     event ProposalRegistered(uint proposalId);
     event Voted(address voter, uint proposalId);
 
-    // Votre smart contract doit définir une énumération qui gère les différents états d’un vote
+    constructor() Ownable(msg.sender) {
+    registerSessionStarted = false;
+    votingSessionStarted = false;
+    proposalId = 0;
+    whiteList[msg.sender] = true;
+    voters[msg.sender].isRegistered = true;
+    }
+
     enum WorkflowStatus {
         RegisteringVoters,
         ProposalsRegistrationStarted,
@@ -97,90 +55,87 @@ contract Voting is Ownable {
         VotesTallied
     }
 
-    // Adds a voter to the whitelist - OnlyOwner
-    function addVoter(address _voterAddr) public onlyOwner {
-        require(!_whitelist[_voterAddr], "Voter is already whitelisted");
-        _whitelist[_voterAddr] = true;
-        emit voterAdded(_voterAddr);
+    function registerVoter(address _addr) public onlyOwner {
+        require(!whiteList[_addr], "Voter already added");
+        whiteList[_addr] = true;
+        voters[_addr].isRegistered = true;
+        emit VoterRegistered(_addr);
     }
 
-    // Removes a voter to the whitelist - OnlyOwner
-    function removedVoter(address _voterAddr) public onlyOwner {
-        require(_whitelist[_voterAddr], "Voter is not whitelisted");
-        _whitelist[_voterAddr] = false;
-        emit voterRemoved(_voterAddr);
+
+    // Proposal registration starts and ends
+    function registerStart() public onlyOwner {
+        require(!registerSessionStarted, "Proposal registeration session has already started");
+        registerSessionStarted = true;
+        emit WorkflowStatusChange(WorkflowStatus.RegisteringVoters, WorkflowStatus.ProposalsRegistrationStarted);
     }
 
-    // Verifies if voter address is whitelisted
-    function isVoter(address _voterAddr) public view returns (bool) {
-        return _whitelist[_voterAddr];
+    function registerEnd() public onlyOwner {
+        require(registerSessionStarted, "Proposal registeration session has not started yet");
+        registerSessionStarted = false;
+        emit WorkflowStatusChange(WorkflowStatus.ProposalsRegistrationStarted, WorkflowStatus.ProposalsRegistrationEnded);
     }
 
-    // Activates proposal registration session
-    function activateRegistration() public onlyOwner {
-        require(!registrationStatut, "Registration is already active");
-        registrationStatut = true;
-        emit registerAvtivated(true);
-    }
-
-    // Ends proposal registration session
-    function endRegistration() public onlyOwner {
-        require(registrationStatut, "Registration is not active");
-        registrationStatut = false;
-        emit registerAvtivated(false);
-    }
-
-    // Authorizes whitelisted electors to register their proposals during the registration session
-    function registerProposal(string memory description) public {
-        require(registrationStatut, "Registration session is closed");
-        require(
-            bytes(description).length > 0,
-            "You may enter a proposal description"
-        );
-
-        Proposal memory newProposal = Proposal({
-            proposer: msg.sender,
-            description: description,
-            voteCount: 1
-        });
-
+    // Authorizes whitelisted electors to register one or several proposals during the registration session
+    function registerProposal(string memory _description) public onlyOwner {
+        require(registerSessionStarted, "Proposal registeration session is closed");
+        require(voters[msg.sender].isRegistered, "You are not allowed to register any proposals");
+        
+        Proposal memory newProposal = Proposal(msg.sender, _description, 0);
         proposals.push(newProposal);
+        proposalId ++;
 
-        emit proposalRegistered(msg.sender, description);
+        emit ProposalRegistered(proposalId); 
     }
 
-    // Number of total propositions
-    function getProposalCount() public view returns (uint) {
-        return proposals.length;
+    // Voting session starts
+    function votingStart() public onlyOwner {
+        require(votingSessionStarted = false, "Voting session is already open");
+        votingSessionStarted = true;
+        emit WorkflowStatusChange(WorkflowStatus.ProposalsRegistrationEnded, WorkflowStatus.VotingSessionStarted);
     }
 
-    // Activates voting session
-    function activateVotingSession() public onlyOwnerOrAdmin {
-        require(!votingSessionStatut, "The session is already active");
-        votingSessionStatut = true;
-        emit votingSessionActivated(true);
+    // Voting session ends
+    function votingEnd() public onlyOwner {
+        require(votingSessionStarted = true, "Voting session is already closed");
+        votingSessionStarted = true;
+        emit WorkflowStatusChange(WorkflowStatus.VotingSessionStarted, WorkflowStatus.VotingSessionEnded);
     }
 
-    // Ends voting session
-    function endVotingSession() public onlyOwnerOrAdmin {
-        require(votingSessionStatut, "The session is already closed");
-        votingSessionStatut = false;
-        emit votingSessionActivated(false);
+    // One elector can vote for one proposal
+    function vote(uint _proposalId) public {
+        require(voters[msg.sender].isRegistered, "You are not allowed to vote");
+        require(!voters[msg.sender].hasVoted, "You've already voted");
+        require(_proposalId < proposals.length, "Invalid proposal ID");
+
+        proposals[_proposalId].voteCount ++;
+
+        voters[msg.sender].hasVoted = true;
+        voters[msg.sender].votedProposalId = _proposalId;
+
+        emit Voted(msg.sender, _proposalId);
     }
 
-    // Registered voters can vote
-    function voting(uint proposalIndex) public {
-        require(votingSessionStatut = true, "Voting session is not open");
-        require(isVoter(msg.sender), "You are not authorized for voting");
-        require(proposalIndex < proposals.length, "Proposition inexistante");
+    function countVote() public onlyOwner returns(uint){
+        uint maxVoteCount = 0;
+
+        for (uint i = 0; i < proposals.length; i++) {
+            if (proposals[i].voteCount > maxVoteCount) {
+                maxVoteCount = proposals[i].voteCount;
+                winningProposalId = i+1;
+            }
+        }
+        emit WorkflowStatusChange(WorkflowStatus.VotingSessionEnded, WorkflowStatus.VotesTallied);
+        return winningProposalId;
     }
 
-    // // Verifies if the voter has already voted
-    // for (uint i = 0; i < votes.length; i++) {
-    //     require(votes[i].voter != msg.sender, "Vous avez déjà voté");
+    // Everybody can verify details about the winning proposal
 
-    //     Vote.push(newVote);
+    function showWinningProposal() public view returns (address, string memory, uint) {
+        address winnerAddress = proposals[winningProposalId].proposer;
+        string memory winnerProposal = proposals[winningProposalId].description;
+        uint winnerProposalVoteCount = proposals[winningProposalId].voteCount;
 
-    //     emit voteRegistered(msg.sender, proposalIndex);
-    // }
+        return (winnerAddress, winnerProposal, winnerProposalVoteCount);
+    }
 }
