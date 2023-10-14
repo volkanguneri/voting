@@ -42,6 +42,7 @@ contract Voting is Ownable {
     registerSessionStarted = false;
     votingSessionStarted = false;
     proposalId = 0;
+    winningProposalId = 0;
     whiteList[msg.sender] = true;
     voters[msg.sender].isRegistered = true;
     }
@@ -90,15 +91,17 @@ contract Voting is Ownable {
 
     // Voting session starts
     function votingStart() public onlyOwner {
-        require(votingSessionStarted = false, "Voting session is already open");
+        require(!votingSessionStarted, "Voting session is already open");
+        require(!registerSessionStarted, "Register session is still open");
+        require(proposals.length > 0, "There is no proposal to vote for");
         votingSessionStarted = true;
         emit WorkflowStatusChange(WorkflowStatus.ProposalsRegistrationEnded, WorkflowStatus.VotingSessionStarted);
     }
 
     // Voting session ends
     function votingEnd() public onlyOwner {
-        require(votingSessionStarted = true, "Voting session is already closed");
-        votingSessionStarted = true;
+        require(votingSessionStarted, "Voting session is already closed");
+        votingSessionStarted = false;
         emit WorkflowStatusChange(WorkflowStatus.VotingSessionStarted, WorkflowStatus.VotingSessionEnded);
     }
 
@@ -116,13 +119,18 @@ contract Voting is Ownable {
         emit Voted(msg.sender, _proposalId);
     }
 
-    function countVote() public onlyOwner returns(uint){
+    function countVote() public onlyOwner returns(uint) {
+        require(!votingSessionStarted, "Voting session is still open");
+        require(!registerSessionStarted, "Register session is still open");
+        require(proposals.length > 0, "There is no proposal to vote for");
+
         uint maxVoteCount = 0;
 
         for (uint i = 0; i < proposals.length; i++) {
             if (proposals[i].voteCount > maxVoteCount) {
                 maxVoteCount = proposals[i].voteCount;
-                winningProposalId = i+1;
+                proposalId = i;
+                winningProposalId = proposalId + 1;
             }
         }
         emit WorkflowStatusChange(WorkflowStatus.VotingSessionEnded, WorkflowStatus.VotesTallied);
@@ -131,11 +139,11 @@ contract Voting is Ownable {
 
     // Everybody can verify details about the winning proposal
 
-    function showWinningProposal() public view returns (address, string memory, uint) {
-        address winnerAddress = proposals[winningProposalId].proposer;
-        string memory winnerProposal = proposals[winningProposalId].description;
-        uint winnerProposalVoteCount = proposals[winningProposalId].voteCount;
+    function showWinningProposal() public view returns (string memory, uint, address) {
+        address winnerAddress = proposals[winningProposalId-1].proposer;
+        string memory winnerProposal = proposals[winningProposalId-1].description;
+        uint winnerProposalVoteCount = proposals[winningProposalId-1].voteCount;
 
-        return (winnerAddress, winnerProposal, winnerProposalVoteCount);
+        return (winnerProposal, winnerProposalVoteCount, winnerAddress);
     }
 }
