@@ -124,12 +124,12 @@ contract Voting is Ownable {
         require(!registerSessionStarted, "Register session is still open");
         require(proposals.length > 0, "There is no proposal to vote for");
 
-        uint maxVoteCount = 0;
+        uint winnersVoteCount = 0;
 
         for (uint i = 0; i < proposals.length; i++) {
-            if (proposals[i].voteCount > maxVoteCount) {
-                maxVoteCount = proposals[i].voteCount;
+            if (proposals[i].voteCount > winnersVoteCount) {
                 proposalId = i;
+                winnersVoteCount = proposals[i].voteCount;
                 winningProposalId = proposalId + 1;
             }
         }
@@ -139,11 +139,11 @@ contract Voting is Ownable {
 
     // Everybody can verify details about the winning proposal
 
-    function showWinningProposal() public view returns (string memory, uint, address) {
+    function showWinningProposal() public view returns (uint, string memory, uint, address) {
         address winnerAddress = proposals[winningProposalId-1].proposer;
         string memory winnerProposal = proposals[winningProposalId-1].description;
         uint winnerProposalVoteCount = proposals[winningProposalId-1].voteCount;
 
-        return (winnerProposal, winnerProposalVoteCount, winnerAddress);
+        return (winningProposalId, winnerProposal, winnerProposalVoteCount, winnerAddress);
     }
 }
