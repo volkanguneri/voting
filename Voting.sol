@@ -147,11 +147,11 @@ contract Voting is Ownable {
 
         for (uint i = 0; i < proposals.length; i++) {
             if (proposals[i].voteCount > winnersVoteCount) {
-                proposals[i].proposalId = i;
                 winnersVoteCount = proposals[i].voteCount;
                 winningProposalId = proposals[i].proposalId;
             }
         }
+
         state = WorkflowStatus.VotesTallied;
         emit WorkflowStatusChange(WorkflowStatus.VotingSessionEnded, WorkflowStatus.VotesTallied);
         return winningProposalId;
