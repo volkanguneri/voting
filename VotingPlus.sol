@@ -149,7 +149,6 @@ contract VotingPlus is Ownable {
 
         uint winnersVoteCount = 0;
 
-
         for (uint i = 0; i < proposals.length; i++) {
             if (proposals[i].voteCount > winnersVoteCount) {
                 delete winners;
@@ -171,14 +170,14 @@ contract VotingPlus is Ownable {
     }
 
     function randomDraw() public onlyOwner returns(uint){
-            require(exaequo, "You can access to this function only in case of ex aequo");
-            
-            uint random = uint(keccak256(abi.encodePacked(block.timestamp, blockhash(block.number-1), winners.length)));
-            uint randomNum = random % winners.length;
-            winningProposalId = winners[randomNum];
-            exaequo = false;
+        require(exaequo, "You can access to this function only in case of ex aequo");
+        require(state == WorkflowStatus.VotesTallied, "Voting session is still open or votes are still not counted");
 
-            return winningProposalId;
+        bytes32 randomHash = keccak256(abi.encodePacked(block.timestamp, blockhash(block.number - 1), winners.length));
+        uint randomNum = uint(randomHash) % proposals.length;
+        winningProposalId = winners[randomNum];
+        exaequo = false;
+        return winningProposalId;
     }
 
 
