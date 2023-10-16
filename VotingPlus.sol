@@ -184,7 +184,7 @@ contract VotingPlus is Ownable {
     // Voters can verify details about the winning proposal
     function showWinningProposal() external view onlyVoters returns (uint, string memory, uint, address) {
         require(state == WorkflowStatus.VotesTallied, "Voting session is still open or votes are still not counted");
-        require(!exaequo, "Ex aequo. Admin shoul trigger random draw function before showing the winning proposal");
+        require(!exaequo, "Ex aequo. Admin should trigger random draw function before showing the winning proposal");
 
         address winnerAddress = proposals[winningProposalId].proposer;
         string memory winnerProposal = proposals[winningProposalId].description;
